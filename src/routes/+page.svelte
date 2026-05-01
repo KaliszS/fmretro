@@ -1,156 +1,191 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { onMount, onDestroy } from "svelte";
+  import "$lib/styles/theme.css";
+  import { detectFm, getStatus, applyPatch, restorePatch } from "$lib/api";
+  import type { Status } from "$lib/types";
+  import TitleBar from "$lib/components/TitleBar.svelte";
+  import TopBar from "$lib/components/TopBar.svelte";
+  import ConfigPanel from "$lib/components/ConfigPanel.svelte";
+  import DebugPanel from "$lib/components/DebugPanel.svelte";
+  import Toast from "$lib/components/Toast.svelte";
+  import VersionBadge from "$lib/components/VersionBadge.svelte";
 
-  let name = $state("");
-  let greetMsg = $state("");
+  let status = $state<Status>({
+    fm_detected: false,
+    pid: null,
+    patch_active: false,
+    shift: null,
+    min_year: null,
+    message: "",
+    year_table_base: null,
+    hooks: [],
+    edition: null,
+  });
 
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  let busy = $state(false);
+  let view = $state<"main" | "debug">("main");
+  let modStartYear = $state<number | null>(null);
+  let toast = $state<{ kind: "info" | "ok" | "err"; text: string } | null>(
+    null,
+  );
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  let pollHandle: ReturnType<typeof setInterval> | null = null;
+
+  function flash(kind: "info" | "ok" | "err", text: string, ms = 4000) {
+    toast = { kind, text };
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast = null;
+    }, ms);
   }
+
+  async function refresh() {
+    try {
+      await detectFm();
+      status = await getStatus();
+    } catch (e) {
+      console.warn("detect failed", e);
+    }
+  }
+
+  async function handleApply(shiftBack: number, minYear: number) {
+    if (busy) return;
+    busy = true;
+    try {
+      await applyPatch(shiftBack, minYear);
+      flash("ok", `Retro patch applied · shift ${shiftBack} years`);
+    } catch (e) {
+      flash("err", String(e));
+    } finally {
+      await refresh();
+      busy = false;
+    }
+  }
+
+  async function handleRestore() {
+    if (busy) return;
+    busy = true;
+    try {
+      await restorePatch();
+      flash("ok", "Original years restored");
+    } catch (e) {
+      flash("err", String(e));
+    } finally {
+      await refresh();
+      busy = false;
+    }
+  }
+
+  function toggleDebug() {
+    view = view === "debug" ? "main" : "debug";
+  }
+
+  onMount(() => {
+    refresh();
+    pollHandle = setInterval(refresh, 2000);
+  });
+
+  onDestroy(() => {
+    if (pollHandle) clearInterval(pollHandle);
+    if (toastTimer) clearTimeout(toastTimer);
+  });
 </script>
 
-<main class="container">
-  <h1>Welcome to Tauri + Svelte</h1>
+<div class="shell">
+  <TitleBar />
+  <main class="app">
+    <TopBar
+      connected={status.fm_detected}
+      debugActive={view === "debug"}
+      onToggleDebug={toggleDebug}
+    />
 
-  <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
-    </a>
-  </div>
-  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
+    {#if view === "main"}
+      <ConfigPanel
+        connected={status.fm_detected}
+        patchActive={status.patch_active}
+        {busy}
+        detectedEdition={status.edition}
+        bind:modStartYear
+        onApply={handleApply}
+        onRestore={handleRestore}
+      />
+    {:else}
+      <DebugPanel onBack={() => (view = "main")} />
+    {/if}
 
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
-</main>
+    <div class="toast-slot">
+      {#if toast}
+        <Toast kind={toast.kind} text={toast.text} />
+      {/if}
+    </div>
+
+    <footer class="foot">
+      Closing this window restores all patches automatically.
+    </footer>
+  </main>
+  <VersionBadge />
+</div>
 
 <style>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.svelte-kit:hover {
-  filter: drop-shadow(0 0 2em #ff3e00);
-}
-
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+  :global(html),
+  :global(body) {
+    background: transparent !important;
+    overflow: hidden;
   }
 
-  a:hover {
-    color: #24c8db;
+  .shell {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: var(--r-lg);
+    background:
+      radial-gradient(900px 500px at 85% -10%, var(--backdrop-glow-a), transparent 60%),
+      radial-gradient(800px 600px at -10% 110%, var(--backdrop-glow-b), transparent 60%),
+      linear-gradient(180deg, var(--bg-page-a) 0%, var(--bg-page-b) 100%);
+    box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.55);
   }
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+  .app {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
   }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
 
+  .app::-webkit-scrollbar {
+    width: 6px;
+  }
+  .app::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+  }
+  .app::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .toast-slot {
+    min-height: 26px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .foot {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 2px 0 0;
+    letter-spacing: 0.2px;
+  }
 </style>

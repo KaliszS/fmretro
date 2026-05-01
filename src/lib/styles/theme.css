@@ -1,0 +1,230 @@
+/* Global theme tokens, base styles, and reusable component utilities.
+   All Svelte components consume these tokens — no hardcoded colors. */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg-page-a: #0b0d14;
+  --bg-page-b: #07080d;
+  --surface-0: rgba(255, 255, 255, 0.025);
+  --surface-1: rgba(255, 255, 255, 0.03);
+  --surface-2: #181b27;
+  --surface-card: #11131c;
+  --surface-card-tint: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+  --surface-input: rgba(255, 255, 255, 0.02);
+
+  /* Borders */
+  --border: rgba(38, 43, 58, 0.8);
+  --border-strong: #3a4156;
+
+  /* Text */
+  --text: #ecedf3;
+  --text-soft: #b8bdcc;
+  --text-muted: #7a8195;
+
+  /* Accents */
+  --accent-a: #7c5cff;
+  --accent-b: #ff4ecd;
+  --accent-c: #34d399;
+  --accent-grad: linear-gradient(135deg, #7c5cff 0%, #ff4ecd 100%);
+  --accent-text-grad: linear-gradient(135deg, #c4b5fd, #f9a8d4);
+  --accent-glow: 0 8px 32px -8px rgba(124, 92, 255, 0.5);
+  --accent-a-soft: rgba(124, 92, 255, 0.25);
+  --accent-b-soft: rgba(255, 78, 205, 0.25);
+  --accent-a-border: rgba(124, 92, 255, 0.35);
+  --accent-card-bg: linear-gradient(135deg, rgba(124, 92, 255, 0.10), rgba(255, 78, 205, 0.10));
+  --accent-card-border: rgba(124, 92, 255, 0.25);
+  --accent-shadow: 0 30px 80px -40px rgba(124, 92, 255, 0.25);
+
+  /* Status */
+  --ok: #34d399;
+  --ok-bg: rgba(52, 211, 153, 0.08);
+  --ok-border: rgba(52, 211, 153, 0.35);
+  --ok-pulse: rgba(52, 211, 153, 0.5);
+  --err: #ff6b6b;
+  --err-bg: rgba(255, 107, 107, 0.08);
+  --err-border: rgba(255, 107, 107, 0.5);
+  --err-focus: rgba(255, 107, 107, 0.12);
+  --warn: #f5b301;
+
+  /* Focus */
+  --focus-ring: rgba(124, 92, 255, 0.15);
+  --focus-bg: rgba(124, 92, 255, 0.04);
+  --focus-border: rgba(124, 92, 255, 0.7);
+
+  /* Body backdrop */
+  --backdrop-glow-a: rgba(255, 78, 205, 0.08);
+  --backdrop-glow-b: rgba(124, 92, 255, 0.10);
+
+  /* Card sheen edge */
+  --card-edge: linear-gradient(135deg, rgba(124, 92, 255, 0.4), rgba(255, 78, 205, 0.2) 40%, transparent 70%);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-page-a: #f4f5fb;
+  --bg-page-b: #e7e9f3;
+  --surface-0: rgba(15, 18, 32, 0.03);
+  --surface-1: rgba(15, 18, 32, 0.04);
+  --surface-2: #ffffff;
+  --surface-card: #ffffff;
+  --surface-card-tint: linear-gradient(180deg, rgba(124, 92, 255, 0.05), rgba(255, 255, 255, 0));
+  --surface-input: rgba(15, 18, 32, 0.025);
+
+  --border: rgba(15, 18, 32, 0.10);
+  --border-strong: rgba(15, 18, 32, 0.22);
+
+  --text: #1a1d2b;
+  --text-soft: #444a60;
+  --text-muted: #6a7186;
+
+  --accent-text-grad: linear-gradient(135deg, #6c4dff, #d63aa3);
+  --accent-glow: 0 8px 24px -10px rgba(124, 92, 255, 0.35);
+  --accent-a-soft: rgba(124, 92, 255, 0.18);
+  --accent-b-soft: rgba(255, 78, 205, 0.18);
+  --accent-a-border: rgba(124, 92, 255, 0.30);
+  --accent-card-bg: linear-gradient(135deg, rgba(124, 92, 255, 0.10), rgba(255, 78, 205, 0.08));
+  --accent-card-border: rgba(124, 92, 255, 0.30);
+  --accent-shadow: 0 18px 40px -28px rgba(124, 92, 255, 0.35);
+
+  --ok: #0f9d6a;
+  --ok-bg: rgba(16, 161, 105, 0.10);
+  --ok-border: rgba(16, 161, 105, 0.40);
+  --ok-pulse: rgba(16, 161, 105, 0.4);
+  --err: #d92f2f;
+  --err-bg: rgba(217, 47, 47, 0.08);
+  --err-border: rgba(217, 47, 47, 0.45);
+  --err-focus: rgba(217, 47, 47, 0.12);
+
+  --focus-ring: rgba(124, 92, 255, 0.18);
+  --focus-bg: rgba(124, 92, 255, 0.06);
+  --focus-border: rgba(124, 92, 255, 0.55);
+
+  --backdrop-glow-a: rgba(255, 78, 205, 0.10);
+  --backdrop-glow-b: rgba(124, 92, 255, 0.12);
+
+  --card-edge: linear-gradient(135deg, rgba(124, 92, 255, 0.30), rgba(255, 78, 205, 0.18) 40%, transparent 70%);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(900px 500px at 85% -10%, var(--backdrop-glow-a), transparent 60%),
+    radial-gradient(800px 600px at -10% 110%, var(--backdrop-glow-b), transparent 60%),
+    linear-gradient(180deg, var(--bg-page-a) 0%, var(--bg-page-b) 100%);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow-x: hidden;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent-a-soft);
+  color: var(--text);
+}
+
+/* ---- Reusable utilities ---- */
+
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.hint strong {
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--surface-1);
+}
+
+.tag.ok {
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+}
+
+.tag-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.15s;
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+}
+
+.icon-btn.active {
+  color: var(--accent-b);
+  border-color: var(--accent-a-border);
+  background: var(--accent-a-soft);
+}
