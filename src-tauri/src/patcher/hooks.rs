@@ -54,19 +54,30 @@ fn rel_jmp_check(from_after: usize, target: usize) -> Option<i32> {
 }
 
 fn find_pattern_in_module(proc: &FmProcess, module: &str, pattern: &[u8]) -> Option<usize> {
-    let info = proc.module(module).ok()?;
+    find_all_patterns_in_module(proc, module, pattern).into_iter().next()
+}
+
+fn find_all_patterns_in_module(proc: &FmProcess, module: &str, pattern: &[u8]) -> Vec<usize> {
+    let info = match proc.module(module) { Ok(i) => i, Err(_) => return vec![] };
     const CHUNK: usize = 4 * 1024 * 1024;
+    let mut results = Vec::new();
     let mut off = 0usize;
     while off < info.size {
         let n = CHUNK.min(info.size - off);
         if let Ok(data) = proc.read(info.base + off, n) {
-            if let Some(idx) = data.windows(pattern.len()).position(|w| w == pattern) {
-                return Some(info.base + off + idx);
+            let mut search = 0;
+            while search + pattern.len() <= data.len() {
+                if let Some(idx) = data[search..].windows(pattern.len()).position(|w| w == pattern) {
+                    results.push(info.base + off + search + idx);
+                    search += idx + 1;
+                } else {
+                    break;
+                }
             }
         }
         off += n;
     }
-    None
+    results
 }
 
 fn build_suffix_table(shift: i32) -> Vec<u8> {
@@ -108,20 +119,18 @@ pub struct VcrtStrHook {
 }
 
 impl VcrtStrHook {
-    pub fn install(
+    fn install_at_site(
         proc: &FmProcess,
+        site: usize,
         shift: i32,
         min_year: i32,
         year_table_base: usize,
     ) -> Result<Self> {
-        let site = find_pattern_in_module(proc, "vcruntime140.dll", STR_SCAN)
-            .ok_or_else(|| super::process::ProcError::Io("VCRT 7-byte leaf not found".into()))?
-            + STR_HOOK_OFFSET;
         let cur = proc.read(site, 5)?;
         if cur != STR_ORIG {
             return Err(super::process::ProcError::Io(format!(
-                "unexpected bytes at hook site: {:02X?}",
-                cur
+                "unexpected bytes at hook site 0x{:X}: {:02X?}",
+                site, cur
             )));
         }
         let sc_addr = proc
@@ -149,6 +158,39 @@ impl VcrtStrHook {
             shellcode: sc_addr,
             shellcode_size: sc_size,
         })
+    }
+
+    /// Install on the first matching leaf (backwards-compatible).
+    pub fn install(
+        proc: &FmProcess,
+        shift: i32,
+        min_year: i32,
+        year_table_base: usize,
+    ) -> Result<Self> {
+        let site = find_pattern_in_module(proc, "vcruntime140.dll", STR_SCAN)
+            .ok_or_else(|| super::process::ProcError::Io("VCRT 7-byte leaf not found".into()))?
+            + STR_HOOK_OFFSET;
+        Self::install_at_site(proc, site, shift, min_year, year_table_base)
+    }
+
+    /// Install on ALL matching leaves in VCRUNTIME140 — covers FM24 and FM26
+    /// which call different instances of the 7-byte memcpy leaf.
+    pub fn install_all(
+        proc: &FmProcess,
+        shift: i32,
+        min_year: i32,
+        year_table_base: usize,
+    ) -> Vec<Self> {
+        let sites = find_all_patterns_in_module(proc, "vcruntime140.dll", STR_SCAN);
+        let mut hooks = Vec::new();
+        for pattern_addr in sites {
+            let site = pattern_addr + STR_HOOK_OFFSET;
+            match Self::install_at_site(proc, site, shift, min_year, year_table_base) {
+                Ok(h) => hooks.push(h),
+                Err(_) => {} // already hooked or mismatched — skip
+            }
+        }
+        hooks
     }
 
     pub fn remove(self, proc: &FmProcess) {
@@ -373,20 +415,12 @@ pub struct VcrtCareerHook {
 }
 
 impl VcrtCareerHook {
-    pub fn install(
-        proc: &FmProcess,
-        shift: i32,
-        min_year: i32,
-        _year_table_base: usize,
-    ) -> Result<Self> {
-        let site = find_pattern_in_module(proc, "vcruntime140.dll", CAR_SCAN)
-            .ok_or_else(|| super::process::ProcError::Io("VCRT 5-byte leaf not found".into()))?
-            + CAR_HOOK_OFFSET;
+    fn install_at_site(proc: &FmProcess, site: usize, shift: i32, min_year: i32) -> Result<Self> {
         let cur = proc.read(site, 5)?;
         if cur != CAR_ORIG {
             return Err(super::process::ProcError::Io(format!(
-                "unexpected bytes at career hook: {:02X?}",
-                cur
+                "unexpected bytes at career hook site 0x{:X}: {:02X?}",
+                site, cur
             )));
         }
         let sc_addr = proc
@@ -409,11 +443,39 @@ impl VcrtCareerHook {
             proc.free(sc_addr);
             return Err(e);
         }
-        Ok(Self {
-            hook_addr: site,
-            shellcode: sc_addr,
-            shellcode_size: sc_size,
-        })
+        Ok(Self { hook_addr: site, shellcode: sc_addr, shellcode_size: sc_size })
+    }
+
+    pub fn install(
+        proc: &FmProcess,
+        shift: i32,
+        min_year: i32,
+        _year_table_base: usize,
+    ) -> Result<Self> {
+        let site = find_pattern_in_module(proc, "vcruntime140.dll", CAR_SCAN)
+            .ok_or_else(|| super::process::ProcError::Io("VCRT 5-byte leaf not found".into()))?
+            + CAR_HOOK_OFFSET;
+        Self::install_at_site(proc, site, shift, min_year)
+    }
+
+    pub fn install_all(proc: &FmProcess, shift: i32, min_year: i32) -> Vec<Self> {
+        let sites = find_all_patterns_in_module(proc, "vcruntime140.dll", CAR_SCAN);
+        // Hook only the first (FM24 near group) and last (FM26 far group) instance.
+        // Hooking all middle instances causes double-transform for FM26: career strings
+        // pass through both a near and a far leaf, so two hooks fire in sequence.
+        let indices: Vec<usize> = match sites.len() {
+            0 => vec![],
+            1 => vec![0],
+            _ => vec![0, sites.len() - 1],
+        };
+        let mut hooks = Vec::new();
+        for i in indices {
+            let site = sites[i] + CAR_HOOK_OFFSET;
+            if let Ok(h) = Self::install_at_site(proc, site, shift, min_year) {
+                hooks.push(h);
+            }
+        }
+        hooks
     }
 
     pub fn remove(self, proc: &FmProcess) {

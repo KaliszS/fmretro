@@ -43,6 +43,7 @@ export type TableDebug = {
   entry_count: number;
   year_first: number;
   year_last: number;
+  season_base: string | null;
 };
 
 export type PatchDebug = {

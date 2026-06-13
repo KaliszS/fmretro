@@ -8,11 +8,16 @@ use super::process::FmProcess;
 use super::string_table::{StringTable, ENTRY_STRIDE, YEAR_COUNT, YEAR_FIRST, YEAR_LAST};
 use super::year_patcher::YearPatcher;
 
-#[derive(Default)]
 struct Hooks {
-    str_hook: Option<VcrtStrHook>,
-    career_hook: Option<VcrtCareerHook>,
+    str_hooks: Vec<VcrtStrHook>,
+    career_hooks: Vec<VcrtCareerHook>,
     dword_hook: Option<VcrtDWordHook>,
+}
+
+impl Default for Hooks {
+    fn default() -> Self {
+        Self { str_hooks: Vec::new(), career_hooks: Vec::new(), dword_hook: None }
+    }
 }
 
 #[derive(Default)]
@@ -90,11 +95,11 @@ impl PatchManager {
     pub fn status(&self) -> PatchStatus {
         let inner = self.inner.lock();
         let mut hooks = Vec::new();
-        if inner.hooks.str_hook.is_some() {
-            hooks.push("Season suffix (YYYY/YY)".into());
+        if !inner.hooks.str_hooks.is_empty() {
+            hooks.push(format!("Season suffix (YYYY/YY) ×{}", inner.hooks.str_hooks.len()));
         }
-        if inner.hooks.career_hook.is_some() {
-            hooks.push("Career range (YY-YY)".into());
+        if !inner.hooks.career_hooks.is_empty() {
+            hooks.push(format!("Career range (YY-YY) ×{}", inner.hooks.career_hooks.len()));
         }
         if inner.hooks.dword_hook.is_some() {
             hooks.push("Year DWORD restoration".into());
@@ -150,25 +155,22 @@ impl PatchManager {
         // Install hooks.
         let mut messages = vec![format!("Shifted {} year entries (shift {:+})", n, shift)];
 
-        match VcrtStrHook::install(&proc, shift_back, min_y, year_base) {
-            Ok(h) => {
-                inner.hooks.str_hook = Some(h);
-                messages.push("Season suffix hook installed".into());
-            }
-            Err(e) => {
-                // Roll back years.
-                inner.year_patcher.restore(&proc);
-                inner.table = None;
-                return Err(format!("Season hook failed: {}", e));
-            }
+        let str_hooks = VcrtStrHook::install_all(&proc, shift_back, min_y, year_base);
+        if str_hooks.is_empty() {
+            inner.year_patcher.restore(&proc);
+            inner.table = None;
+            return Err("Season hook failed: no VCRT 7-byte leaf found".into());
         }
+        messages.push(format!("Season suffix hooks installed ({})", str_hooks.len()));
+        inner.hooks.str_hooks = str_hooks;
 
-        if let Ok(h) = VcrtCareerHook::install(&proc, shift_back, 0, year_base) {
-            inner.hooks.career_hook = Some(h);
-            messages.push("Career range hook installed".into());
-        } else {
+        let career_hooks = VcrtCareerHook::install_all(&proc, shift_back, 0);
+        if career_hooks.is_empty() {
             messages.push("Career hook skipped (pattern not found)".into());
+        } else {
+            messages.push(format!("Career range hooks installed ({})", career_hooks.len()));
         }
+        inner.hooks.career_hooks = career_hooks;
 
         if min_y > 0 {
             if let Ok(h) = VcrtDWordHook::install(&proc, shift_back, min_y, year_base) {
@@ -194,13 +196,19 @@ impl PatchManager {
             }
         };
         let mut parts = Vec::new();
-        if let Some(h) = inner.hooks.str_hook.take() {
+        let n_str = inner.hooks.str_hooks.len();
+        for h in inner.hooks.str_hooks.drain(..) {
             h.remove(&proc);
-            parts.push("season hook removed");
         }
-        if let Some(h) = inner.hooks.career_hook.take() {
+        if n_str > 0 {
+            parts.push("season hooks removed");
+        }
+        let n_car = inner.hooks.career_hooks.len();
+        for h in inner.hooks.career_hooks.drain(..) {
             h.remove(&proc);
-            parts.push("career hook removed");
+        }
+        if n_car > 0 {
+            parts.push("career hooks removed");
         }
         if let Some(h) = inner.hooks.dword_hook.take() {
             h.remove(&proc);
@@ -249,9 +257,9 @@ impl PatchManager {
         let mut hook_list: Vec<HookDebug> = Vec::new();
         let proc_ref = inner.proc.as_ref();
         let vcrt_base = proc_ref.and_then(|p| p.module("VCRUNTIME140.dll").ok().map(|m| m.base));
-        if let Some(h) = inner.hooks.str_hook.as_ref() {
+        for (i, h) in inner.hooks.str_hooks.iter().enumerate() {
             hook_list.push(build_hook_debug(
-                "Season suffix (YYYY/YY)",
+                &format!("Season suffix (YYYY/YY) #{}", i + 1),
                 "VCRUNTIME140.dll",
                 "7-byte memcpy leaf",
                 vcrt_base,
@@ -261,9 +269,9 @@ impl PatchManager {
                 proc_ref,
             ));
         }
-        if let Some(h) = inner.hooks.career_hook.as_ref() {
+        for (i, h) in inner.hooks.career_hooks.iter().enumerate() {
             hook_list.push(build_hook_debug(
-                "Career range (YY-YY)",
+                &format!("Career range (YY-YY) #{}", i + 1),
                 "VCRUNTIME140.dll",
                 "5-byte memcpy leaf",
                 vcrt_base,
