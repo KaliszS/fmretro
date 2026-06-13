@@ -60,6 +60,9 @@
       lines.push(
         `year_table: stride=0x${info.table.stride.toString(16)} count=${info.table.entry_count} range=${info.table.year_first}..${info.table.year_last}`,
       );
+      if (info.table.season_base) {
+        lines.push(`season_table.base: ${info.table.season_base}`);
+      }
     } else {
       lines.push("year_table: not located");
     }
@@ -198,6 +201,12 @@
               {info.table.year_first}–{info.table.year_last}
             </dd>
           </div>
+          {#if info.table.season_base}
+            <div class="row">
+              <dt class="k">Season base</dt>
+              <dd class="v mono">{info.table.season_base}</dd>
+            </div>
+          {/if}
         </div>
       {:else}
         <p class="muted">Not located. Apply a patch first or connect to fm.exe.</p>
