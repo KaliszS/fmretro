@@ -1,12 +1,14 @@
 <script lang="ts">
-  import NumberField from "./NumberField.svelte";
-  import PreviewCard from "./PreviewCard.svelte";
+  import GameCard from "./GameCard.svelte";
+  import YearField from "./YearField.svelte";
+  import SeasonBoard from "./SeasonBoard.svelte";
   import ActionBar from "./ActionBar.svelte";
   import { findEdition, formatSeason, editionIdForMajor } from "../editions";
   import type { FmEditionInfo } from "../types";
 
   type Props = {
     connected: boolean;
+    pid: number | null;
     patchActive: boolean;
     busy: boolean;
     detectedEdition: FmEditionInfo | null;
@@ -17,6 +19,7 @@
 
   let {
     connected,
+    pid,
     patchActive,
     busy,
     detectedEdition,
@@ -25,51 +28,49 @@
     onRestore,
   }: Props = $props();
 
-  let detectedId = $derived(
-    detectedEdition ? editionIdForMajor(detectedEdition.major) : null,
-  );
+  const DEFAULT_YEAR = 1986;
 
-  let edition = $derived(detectedId ? findEdition(detectedId) : null);
+  let edition = $derived.by(() => {
+    const id = detectedEdition ? editionIdForMajor(detectedEdition.major) : null;
+    return id ? findEdition(id) : null;
+  });
 
   let inputsLocked = $derived(patchActive || busy || !edition);
 
-  let shiftBack = $derived.by<number | null>(() => {
-    if (!edition || modStartYear === null) return null;
-    return edition.startYear - modStartYear;
-  });
+  let shiftBack = $derived(
+    edition && modStartYear !== null ? edition.startYear - modStartYear : null,
+  );
 
-  let modStartYearError = $derived.by<string | null>(() => {
+  let error = $derived.by<string | null>(() => {
     if (modStartYear === null) return null;
-    if (!Number.isInteger(modStartYear)) return "Whole years only.";
-    if (modStartYear < 1900 || modStartYear > 2050)
-      return "Enter a 4-digit year (e.g. 1986).";
+    // Partial input while typing — don't nag until four digits are in.
+    if (modStartYear < 1000) return null;
+    if (modStartYear < 1900 || modStartYear > 2050) return "Use a year between 1900 and 2050.";
     if (edition && modStartYear >= edition.startYear)
-      return `Must be earlier than FM start year (${edition.startYear}).`;
-    if (edition && edition.startYear - modStartYear > 100)
-      return "Too far back — maximum is 100 years.";
+      return `Must be before ${edition.startYear}, when this edition starts.`;
+    if (edition && edition.startYear - modStartYear > 100) return "That's more than 100 years back.";
     return null;
-  });
-
-  let shiftHint = $derived.by<string>(() => {
-    if (shiftBack !== null && modStartYearError === null)
-      return `Shift: ${shiftBack} years back.`;
-    return "First year of your mod's own historical data.";
   });
 
   let ready = $derived(
     modStartYear !== null &&
-      modStartYearError === null &&
+      modStartYear >= 1000 &&
+      error === null &&
       shiftBack !== null &&
       shiftBack > 0,
   );
 
+  let hint = $derived.by(() => {
+    if (!edition) return "Available once the game is detected.";
+    if (patchActive) return "Restore the original years to change this.";
+    if (ready && shiftBack !== null) return `All dates shift ${shiftBack} years back.`;
+    return "The first season of your historical database.";
+  });
+
   let canApply = $derived(!!edition && connected && !patchActive && ready);
 
-  let sourceSeason = $derived(edition ? formatSeason(edition.startYear) : "—");
-  let targetSeason = $derived.by(() => {
-    if (!ready || modStartYear === null) return "—";
-    return formatSeason(modStartYear);
-  });
+  let sourceSeason = $derived(edition ? formatSeason(edition.startYear) : null);
+  let targetSeason = $derived(ready && modStartYear !== null ? formatSeason(modStartYear) : null);
 
   function handleApply() {
     if (!canApply || shiftBack === null || modStartYear === null) return;
@@ -77,178 +78,37 @@
   }
 </script>
 
-<article class="card">
-  <header class="head">
-    <h2>Configuration</h2>
-    <p>Edition is detected from the running fm.exe.</p>
-  </header>
+<div class="panel">
+  <GameCard {connected} {edition} {pid} {patchActive} />
 
-  <section class="block">
-    <span class="label">Detected FM Edition</span>
-    <div class="edition" class:edition--idle={!edition}>
-      {#if edition}
-        <div class="edition-text">
-          <span class="edition-name">{edition.label}</span>
-          <span class="edition-season">starts {sourceSeason}</span>
-        </div>
-        <span class="tag ok" title="Read from fm.exe">
-          <span class="tag-dot"></span>
-          Auto
-        </span>
-      {:else if connected}
-        <span class="edition-idle">Identifying edition…</span>
-      {:else}
-        <span class="edition-idle">Waiting for fm.exe…</span>
-      {/if}
-    </div>
-  </section>
-
-  <NumberField
-    label="Mod original start year"
+  <YearField
+    label="Mod start year"
     bind:value={modStartYear}
-    placeholder="e.g. 1986"
+    placeholder={String(DEFAULT_YEAR)}
+    fallback={DEFAULT_YEAR}
     min={1900}
-    max={2050}
-    hint={shiftHint}
-    error={modStartYearError}
+    max={edition ? edition.startYear - 1 : 2050}
+    {hint}
+    {error}
     disabled={inputsLocked}
   />
 
-  <PreviewCard {sourceSeason} {targetSeason} valid={ready} />
+  <SeasonBoard source={sourceSeason} target={targetSeason} shift={ready ? shiftBack : null} />
 
   <ActionBar
+    {patchActive}
     {canApply}
     canRestore={connected && patchActive}
     {busy}
     onApply={handleApply}
     {onRestore}
   />
-</article>
+</div>
 
 <style>
-  .card {
-    position: relative;
-    background: var(--surface-card-tint), var(--surface-card);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 16px;
+  .panel {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    box-shadow: var(--accent-shadow);
-    overflow: hidden;
-  }
-
-  .card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: var(--card-edge);
-    -webkit-mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-            mask-composite: exclude;
-    pointer-events: none;
-    opacity: 0.7;
-  }
-
-  .head {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .head h2 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-  }
-
-  .head p {
-    margin: 0;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .block {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .edition {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: var(--r-md);
-    border: 1px solid var(--border);
-    background: var(--surface-0);
-  }
-
-  .edition--idle {
-    border-style: dashed;
-    background: transparent;
-  }
-
-  .edition-text {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .edition-name {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-    background: var(--accent-text-grad);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .edition-season {
-    font-size: 10px;
-    color: var(--text-muted);
-    letter-spacing: 0.3px;
-  }
-
-  .edition-idle {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-style: italic;
-  }
-
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.4px;
-    padding: 3px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--surface-1);
-    color: var(--text-muted);
-  }
-
-  .tag.ok {
-    border-color: var(--ok-border, #2a6b3a);
-    background: var(--ok-bg, rgba(42, 107, 58, 0.12));
-    color: var(--ok-text, #5ec97a);
-  }
-
-  .tag-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: 0.8;
+    gap: 18px;
   }
 </style>

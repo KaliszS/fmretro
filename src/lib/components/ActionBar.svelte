@@ -1,5 +1,6 @@
 <script lang="ts">
   type Props = {
+    patchActive: boolean;
     canApply: boolean;
     canRestore: boolean;
     busy: boolean;
@@ -7,105 +8,125 @@
     onRestore: () => void;
   };
 
-  let { canApply, canRestore, busy, onApply, onRestore }: Props = $props();
+  let { patchActive, canApply, canRestore, busy, onApply, onRestore }: Props = $props();
+
+  let disabled = $derived(busy || (patchActive ? !canRestore : !canApply));
 </script>
 
-<div class="actions">
-  <button
-    type="button"
-    class="btn primary"
-    disabled={!canApply || busy}
-    onclick={onApply}
-  >
-    {#if busy}
-      <span class="spinner" aria-hidden="true"></span>
-      Working…
+<button
+  type="button"
+  class="btn"
+  class:primary={!patchActive}
+  class:secondary={patchActive}
+  class:busy
+  {disabled}
+  aria-busy={busy}
+  onclick={patchActive ? onRestore : onApply}
+>
+  <span class="content">
+    {#if patchActive}
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2.75 8a5.25 5.25 0 1 0 1.6-3.78" />
+        <path d="M2.5 2.5v2.75h2.75" />
+      </svg>
+      Restore original years
     {:else}
-      <span class="ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2">
-          <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </span>
       Apply patch
     {/if}
-  </button>
-  <button
-    type="button"
-    class="btn ghost"
-    disabled={!canRestore || busy}
-    onclick={onRestore}
-  >
-    <span class="ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 12a9 9 0 1 0 3-6.7" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3 4v5h5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </span>
-    Restore
-  </button>
-</div>
+  </span>
+  {#if busy}
+    <span class="spinner" aria-hidden="true"></span>
+  {/if}
+</button>
 
 <style>
-  .actions {
-    display: flex;
-    gap: 10px;
-  }
-
   .btn {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 14px;
+    position: relative;
+    width: 100%;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    padding: 0 16px;
     border-radius: var(--r-md);
+    border: 1px solid transparent;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    border: 1px solid var(--border);
-    color: var(--text);
-    background: var(--surface-1);
-    transition: all 0.15s ease;
-  }
-
-  .btn:hover:not(:disabled) {
-    border-color: var(--border-strong);
-    transform: translateY(-1px);
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      opacity 140ms ease,
+      transform 100ms ease;
   }
 
   .btn:active:not(:disabled) {
-    transform: translateY(0);
+    transform: scale(0.985);
+  }
+
+  .content {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 140ms ease;
+  }
+
+  .primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .secondary {
+    background: var(--bg-raised);
+    border-color: var(--line-strong);
+    color: var(--text);
+  }
+
+  .secondary:hover:not(:disabled) {
+    background: var(--bg-hover);
   }
 
   .btn:disabled {
-    opacity: 0.4;
     cursor: not-allowed;
   }
 
-  .btn.primary {
-    background: var(--accent-grad);
-    color: #ffffff;
-    border-color: transparent;
-    box-shadow: var(--accent-glow);
+  .primary:disabled {
+    background: var(--bg-active);
+    color: var(--text-3);
   }
 
-  .btn.primary:hover:not(:disabled) {
-    filter: brightness(1.08);
-    box-shadow: 0 12px 36px -8px var(--accent-b-soft);
+  .secondary:disabled {
+    color: var(--text-3);
   }
 
-  .ico {
-    display: inline-grid;
-    place-items: center;
+  /* While busy keep the button's colors; just swap the label for a spinner. */
+  .btn.busy {
+    cursor: progress;
+  }
+
+  .primary.busy:disabled {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .busy .content {
+    opacity: 0;
   }
 
   .spinner {
-    width: 13px;
-    height: 13px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #fff;
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: spin 700ms linear infinite;
   }
 
   @keyframes spin {
